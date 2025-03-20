@@ -1,4 +1,4 @@
-# Kubernetes Cluster Setup Script with Multipass and `kubeadm`
+# Kubernetes Cluster setup script with Multipass and Kubeadm
 
 This script automates the creation of a Kubernetes cluster using [Multipass](https://multipass.run/) and [`kubeadm`](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/). It sets up a control plane node and worker nodes, installs Calico as the CNI (Container Network Interface), and ensures proper cleanup in case of errors or interruptions.
 
@@ -16,7 +16,7 @@ This script automates the creation of a Kubernetes cluster using [Multipass](htt
 Before running the script, ensure the following:
 
 1. **Operating System**:
-   - Tested on **Mac (ARM architecture)**.
+   - Tested on **Mac m3 (ARM architecture)**.
    - Should also work on Linux and other Unix-like systems with Multipass installed.
 
 2. **Software Dependencies**:
