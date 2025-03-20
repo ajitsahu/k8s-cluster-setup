@@ -7,7 +7,7 @@ This script automates the creation of a Kubernetes cluster using [Multipass](htt
 2. [Installation](#installation)
 3. [Usage](#usage)
 4. [Troubleshooting](#troubleshooting)
-5. [License](#license)
+5. [Acknowledgments](#acknowledgments)
 
 ---
 
