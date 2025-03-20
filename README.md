@@ -1,6 +1,6 @@
 # Kubernetes Cluster setup script with Multipass and Kubeadm
 
-This script automates the creation of a Kubernetes cluster using [Multipass](https://multipass.run/) and [`kubeadm`](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/). It sets up a control plane node and worker nodes, installs Calico as the CNI (Container Network Interface), and ensures proper cleanup in case of errors or interruptions.
+This script automates the creation of a Kubernetes cluster using [Multipass](https://multipass.run/) and [Kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/). It sets up a control plane node and worker nodes, installs Calico as the CNI (Container Network Interface), and ensures proper cleanup in case of errors or interruptions.
 
 ## Table of Contents
 1. [Prerequisites](#prerequisites)
