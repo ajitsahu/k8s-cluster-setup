@@ -81,9 +81,9 @@ wait_for_pods() {
 # ============================
 launch_instances() {
     log "Launching Multipass instances..."
-    multipass launch -n $CONTROL_NODE 24.04 -c 2 -m 2G -d 10G || { log "Failed to launch control node"; exit 1; }
+    multipass launch -n $CONTROL_NODE 24.04 -c 2 -m 4G -d 10G || { log "Failed to launch control node"; exit 1; }
     for node in "${WORKER_NODES[@]}"; do
-        multipass launch -n $node 24.04 -c 1 -m 2G -d 10G || { log "Failed to launch worker node $node"; exit 1; }
+        multipass launch -n $node 24.04 -c 2 -m 4G -d 10G || { log "Failed to launch worker node $node"; exit 1; }
     done
     log "Instances launched successfully."
 }
@@ -113,6 +113,12 @@ EOF
             sed -e 's/SystemdCgroup = false/SystemdCgroup = true/' \
                 -e 's|sandbox_image = \"registry\.k8s\.io/pause:[0-9.]*\"|sandbox_image = \"registry.k8s.io/pause:3.10\"|' | \
             tee /etc/containerd/config.toml && \
+            cat <<EOF | tee /etc/crictl.yaml
+runtime-endpoint: unix:///var/run/containerd/containerd.sock
+image-endpoint: unix:///var/run/containerd/containerd.sock
+timeout: 10
+debug: false
+EOF
             systemctl restart containerd
         " &
     done
@@ -210,10 +216,23 @@ install_calicoctl() {
 join_worker_nodes() {
     log "Joining worker nodes to the cluster..."
     JOIN_COMMAND=$(multipass exec $CONTROL_NODE -- kubeadm token create --print-join-command)
+    
+    # Wait for control plane to be ready before joining nodes
+    log "Waiting for control plane to be ready..."
+    sleep 10
+
     for node in "${WORKER_NODES[@]}"; do
+        log "Joining and labeling worker node: $node"
         multipass exec $node -- sudo bash -c "$JOIN_COMMAND" || { log "Failed to join node $node"; exit 1; }
+        
+        # Wait a few seconds for the node to be registered
+        sleep 5
+        
+        # Label the worker node after successful join
+        multipass exec $CONTROL_NODE -- sudo -u ubuntu kubectl label node $node node-role.kubernetes.io/worker=worker --overwrite=true || { log "Failed to label node $node"; exit 1; }
+        log "Successfully joined and labeled node: $node"
     done
-    log "Worker nodes joined successfully."
+    log "All worker nodes joined and labeled successfully."
 }
 
 # ============================

@@ -6,6 +6,8 @@ This script automates the creation of a Kubernetes cluster using [Multipass](htt
 1. [Prerequisites](#prerequisites)
 2. [Installation](#installation)
 3. [Usage](#usage)
+   - [What Happens During Execution?](#what-happens-during-execution)
+   - [Installing MetalLB Load Balancer](#installing-metallb-load-balancer)
 4. [Troubleshooting](#troubleshooting)
 5. [Acknowledgments](#acknowledgments)
 
@@ -80,6 +82,32 @@ Run the script to create the Kubernetes cluster:
 6. **Cleanup**:
    - If the script fails or is interrupted, it automatically cleans up all Multipass instances to prevent resource leaks.
 
+### Installing MetalLB Load Balancer
+
+After setting up the cluster, you can install MetalLB to enable LoadBalancer services:
+
+1. Make the MetalLB installation script executable:
+   ```bash
+   chmod +x install-metallb.sh
+   ```
+
+2. Run the installation script:
+   ```bash
+   ./install-metallb.sh
+   ```
+
+The script will:
+- Install MetalLB components in the `metallb-system` namespace
+- Configure an IP address pool (192.168.64.100-192.168.64.120)
+- Set up L2 advertisement for LoadBalancer services
+
+To verify the installation:
+```bash
+kubectl get pods -n metallb-system
+```
+
+You can now create LoadBalancer services that will automatically receive IP addresses from the configured pool.
+
 ---
 
 ## Troubleshooting
@@ -122,3 +150,4 @@ Run the script to create the Kubernetes cluster:
 - [Multipass](https://multipass.run/): For providing a lightweight and easy-to-use VM manager.
 - [Kubernetes](https://kubernetes.io/): For the powerful container orchestration platform.
 - [Calico](https://www.tigera.io/project-calico/): For the robust CNI solution.
+- [MetalLB](https://metallb.io/): For the load-balancer implementation.
