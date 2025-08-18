@@ -1,3 +1,22 @@
 setup.log
 kubeconfig
 .DS_Store
+
+# Kubernetes related
+*.kubeconfig
+join-command.txt
+token.txt
+
+# Logs and temp files
+*.log
+*.tmp
+*~
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System specific
+.env
