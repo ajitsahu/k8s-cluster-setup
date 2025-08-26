@@ -14,7 +14,7 @@ Istio uses the Kubernetes Gateway API for traffic management. Install the necess
 
 ```bash
 kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
 ```
 
 ## Step 2: Install Istio with Ambient Profile
