@@ -89,7 +89,7 @@ kubectl create secret tls wildcard-certs \
 This `Gateway` resource defines the entry point for traffic, listening on ports 80 and 443. It is configured to allow `HTTPRoute` resources from all namespaces to attach to it.
 
 ```bash
-kubectl apply -f - <<EOF
+kubectl apply -f - <<"EOF"
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -138,17 +138,19 @@ kubectl get ns -L istio.io/dataplane-mode
 ### 4.2. Deploy the httpbin Application
 
 ```bash
-kubectl apply -n sample -f - <<EOF
+kubectl apply -n sample -f - <<"EOF"
 # Copyright Istio Authors
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: httpbin
+  namespace: sample
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: httpbin
+  namespace: sample
   labels:
     app: httpbin
     service: httpbin
@@ -164,6 +166,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: httpbin
+  namespace: sample
 spec:
   replicas: 1
   selector:
@@ -191,7 +194,7 @@ EOF
 Create an `HTTPRoute` to route traffic for `httpbin.example.com` from the `shared-gateway` to the `httpbin` service.
 
 ```bash
-kubectl apply -f - <<EOF
+kubectl apply -f - <<"EOF"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -222,7 +225,7 @@ To apply L7 policies (like `AuthorizationPolicy`), you must deploy a waypoint pr
 
 ```bash
 # This command creates a Gateway resource for the waypoint and enrolls the namespace to use it.
-istioctl waypoint apply -n sample --enroll-namespace
+istioctl waypoint apply -n sample --enroll-namespace --wait
 
 # Verify the waypoint proxy deployment
 kubectl get gateway -n sample
