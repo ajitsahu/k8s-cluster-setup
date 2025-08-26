@@ -5,6 +5,61 @@ set -e
 # MetalLB version
 METALLB_VERSION=v0.15.2
 
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 <IP-RANGE>"
+    echo "Example: $0 192.168.64.100-192.168.64.120"
+    echo ""
+    echo "⚠️  IMPORTANT: Please check VMs IP range with the command 'multipass list' and put free IP range"
+    echo "    Command to check: multipass list"
+    exit 1
+}
+
+# Function to validate IP range format
+validate_ip_range() {
+    local range=$1
+    # Check if the range matches the format: IP-IP
+    if ! [[ $range =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}-([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        echo "❌ Invalid IP range format. Expected format: START_IP-END_IP (e.g., 192.168.64.100-192.168.64.120)"
+        exit 1
+    fi
+    
+    # Extract start and end IPs
+    local start_ip=${range%-*}
+    local end_ip=${range#*-}
+    
+    # Validate each IP
+    for ip in "$start_ip" "$end_ip"; do
+        if ! [[ $ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            echo "❌ Invalid IP address: $ip"
+            exit 1
+        fi
+        # Validate each octet
+        IFS='.' read -r -a octets <<< "$ip"
+        for octet in "${octets[@]}"; do
+            if [[ $octet -lt 0 || $octet -gt 255 ]]; then
+                echo "❌ Invalid IP address: $ip (octets must be between 0 and 255)"
+                exit 1
+            fi
+        done
+    done
+}
+
+# Check if IP range is provided
+if [ $# -ne 1 ]; then
+    show_usage
+fi
+
+IP_RANGE=$1
+validate_ip_range "$IP_RANGE"
+
+echo "ℹ️  Using IP range: $IP_RANGE"
+
+# Display current VM IPs for reference
+echo "Current Multipass VMs:"
+multipass list || echo "❌ Failed to list Multipass VMs. Please check them manually."
+echo ""
+
 # Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
     echo "❌ kubectl not found. Please ensure kubectl is installed and configured."
@@ -40,7 +95,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-  - 192.168.64.100-192.168.64.120   # Free range in same node subnet
+  - ${IP_RANGE}   # User provided or default IP range
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement

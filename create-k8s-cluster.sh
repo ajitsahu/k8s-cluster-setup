@@ -16,6 +16,7 @@ CALICO_VERSION=${CALICO_VERSION:-"v3.29.2"}
 
 CONTROL_NODE="control"
 WORKER_NODES=("node1" "node2")
+ALL_NODES=("$CONTROL_NODE" "${WORKER_NODES[@]}")
 LOG_FILE="setup.log"
 
 CLEANUP_REQUIRED=1  # Default: Cleanup is required (1 = true, 0 = false)
@@ -27,11 +28,21 @@ log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
+# Modified cleanup function to delete only specific instances
 cleanup() {
     if [[ $CLEANUP_REQUIRED -eq 1 ]]; then
-        log "Cleaning up Multipass instances..."
-        multipass delete --all --purge || true
-        log "Cleanup completed."
+        log "Cleaning up specified Multipass instances..."
+        for node in "${ALL_NODES[@]}"; do
+            if multipass list | grep -q "^$node "; then
+                log "Deleting Multipass instance: $node"
+                multipass delete "$node" || true
+            else
+                log "Multipass instance '$node' not found, skipping deletion."
+            fi
+        done
+        log "Purging deleted instances to reclaim disk space..."
+        multipass purge || true
+        log "Cleanup of specified instances completed."
     else
         log "Skipping cleanup as the script completed successfully."
     fi
@@ -81,49 +92,67 @@ wait_for_pods() {
 # ============================
 launch_instances() {
     log "Launching Multipass instances..."
+    # Launch only the control node initially
     multipass launch -n $CONTROL_NODE 24.04 -c 2 -m 4G -d 10G || { log "Failed to launch control node"; exit 1; }
-    for node in "${WORKER_NODES[@]}"; do
-        multipass launch -n $node 24.04 -c 2 -m 4G -d 10G || { log "Failed to launch worker node $node"; exit 1; }
-    done
-    log "Instances launched successfully."
+    log "Control instance launched successfully."
 }
 
+# Renamed function to install on a single specified node
 install_kubernetes_components() {
-    local nodes=("$@")
-    log "Installing Kubernetes components on nodes: ${nodes[*]}"
-    for node in "${nodes[@]}"; do
-        log "Installing on node: $node"
-        multipass exec $node -- sudo bash -c "
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update && \
-            apt-get install -y apt-transport-https ca-certificates curl gpg && \
-            curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
-            echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \
-            cat <<EOF | tee /etc/sysctl.d/k8s.conf
+    local node=$1
+    log "Installing Kubernetes components on node: $node"
+    multipass exec $node -- sudo bash -c "
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update && \\
+        apt-get install -y apt-transport-https ca-certificates curl gpg && \\
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \\
+        echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/$KUBERNETES_VERSION/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \\
+        cat <<EOF | tee /etc/sysctl.d/k8s.conf
 net.ipv4.ip_forward = 1
 EOF
-            sysctl --system && \
-            sysctl net.ipv4.ip_forward && \
-            apt-get update && \
-            apt-get install -y kubelet kubeadm kubectl && \
-            apt-mark hold kubelet kubeadm kubectl && \
-            apt-get install -y containerd && \
-            mkdir -p /etc/containerd && \
-            containerd config default | \
-            sed -e 's/SystemdCgroup = false/SystemdCgroup = true/' \
-                -e 's|sandbox_image = \"registry\.k8s\.io/pause:[0-9.]*\"|sandbox_image = \"registry.k8s.io/pause:3.10\"|' | \
-            tee /etc/containerd/config.toml && \
-            cat <<EOF | tee /etc/crictl.yaml
+        sysctl --system && \\
+        sysctl net.ipv4.ip_forward && \\
+        apt-get update && \\
+        apt-get install -y kubelet kubeadm kubectl && \\
+        apt-mark hold kubelet kubeadm kubectl && \\
+        apt-get install -y containerd && \\
+        mkdir -p /etc/containerd && \\
+        containerd config default | \\
+        sed -e 's/SystemdCgroup = false/SystemdCgroup = true/' \\
+            -e 's|sandbox_image = \"registry.k8s.io/pause:[0-9.]*\"|sandbox_image = \"registry.k8s.io/pause:3.10\"|' | \\
+        tee /etc/containerd/config.toml && \\
+        cat <<EOF | tee /etc/crictl.yaml
 runtime-endpoint: unix:///var/run/containerd/containerd.sock
 image-endpoint: unix:///var/run/containerd/containerd.sock
 timeout: 10
 debug: false
 EOF
-            systemctl restart containerd
-        " &
+        systemctl restart containerd
+    "
+    log "Kubernetes components installed successfully on $node."
+}
+
+create_worker_nodes() {
+    log "Creating worker nodes by cloning control node..."
+    
+    # Stop the control node before cloning
+    log "Stopping control node for cloning...Sleep 20s..."
+    sleep 20
+    multipass stop "$CONTROL_NODE" || { log "Failed to stop control node"; exit 1; }
+    
+    # Create worker nodes by cloning the control node
+    for worker in "${WORKER_NODES[@]}"; do
+        log "Cloning control node to create worker node: $worker"
+        multipass clone "$CONTROL_NODE" -n "$worker" || { log "Failed to clone control node to $worker"; exit 1; }
     done
-    wait  # Wait for all background jobs to complete
-    log "Kubernetes components installed successfully."
+    
+    # Start all nodes
+    log "Starting all nodes..."
+    multipass start "${ALL_NODES[@]}" || { log "Failed to start nodes"; exit 1; }
+    
+    # Wait for nodes to be ready
+    sleep 15
+    log "All worker nodes created by cloning successfully."
 }
 
 initialize_control_plane() {
@@ -240,13 +269,27 @@ join_worker_nodes() {
 # ============================
 main() {
     log "Starting Kubernetes cluster setup..."
+    
+    # Step 1: Launch and configure control plane node
     launch_instances
-    install_kubernetes_components "$CONTROL_NODE" "${WORKER_NODES[@]}"
+    install_kubernetes_components "$CONTROL_NODE"
+    
+    # Step 2: Create and configure worker nodes
+    create_worker_nodes
+    
+    # Step 3: Initialize control plane
     initialize_control_plane
+    
+    # Step 4: Install CNI (Calico)
     install_calico
     install_calicoctl
+    
+    # Step 5: Join worker nodes
     join_worker_nodes
-
+    
+    # Print cluster status
+    multipass exec $CONTROL_NODE -- sudo -u ubuntu kubectl get nodes -o wide
+    
     log "Kubernetes cluster setup completed successfully!"
     CLEANUP_REQUIRED=0  # No cleanup needed if everything succeeds
 }
