@@ -93,12 +93,12 @@ After setting up the cluster, you can install MetalLB to enable LoadBalancer ser
 
 2. Run the installation script:
    ```bash
-   ./install-metallb.sh
+   ./install-metallb.sh 192.168.64.200-192.168.64.220
    ```
 
 The script will:
 - Install MetalLB components in the `metallb-system` namespace
-- Configure an IP address pool (192.168.64.100-192.168.64.120)
+- Configure an IP address pool (192.168.64.200-192.168.64.220)
 - Set up L2 advertisement for LoadBalancer services
 
 To verify the installation:
