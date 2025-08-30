@@ -135,10 +135,34 @@ EOF
 create_worker_nodes() {
     log "Creating worker nodes by cloning control node..."
     
+    # Function to wait for node state
+    wait_for_node_state() {
+        local node=$1
+        local expected_state=$2
+        local max_attempts=30
+        local attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+            local current_state
+            current_state=$(multipass info "$node" | grep "State:" | awk '{print $2}')
+            
+            if [ "$current_state" = "$expected_state" ]; then
+                return 0
+            fi
+            
+            log "Waiting for $node to reach $expected_state state (attempt $attempt/$max_attempts)..."
+            attempt=$((attempt + 1))
+            sleep 2
+        done
+        
+        log "Timeout waiting for $node to reach $expected_state state"
+        return 1
+    }
+    
     # Stop the control node before cloning
-    log "Stopping control node for cloning...Sleep 20s..."
-    sleep 20
+    log "Stopping control node for cloning..."
     multipass stop "$CONTROL_NODE" || { log "Failed to stop control node"; exit 1; }
+    wait_for_node_state "$CONTROL_NODE" "Stopped" || exit 1
     
     # Create worker nodes by cloning the control node
     for worker in "${WORKER_NODES[@]}"; do
@@ -150,9 +174,32 @@ create_worker_nodes() {
     log "Starting all nodes..."
     multipass start "${ALL_NODES[@]}" || { log "Failed to start nodes"; exit 1; }
     
-    # Wait for nodes to be ready
-    sleep 15
-    log "All worker nodes created by cloning successfully."
+    # Wait for all nodes to be running
+    for node in "${ALL_NODES[@]}"; do
+        wait_for_node_state "$node" "Running" || exit 1
+    done
+    
+    # Verify SSH connectivity to all nodes
+    log "Verifying SSH connectivity to all nodes..."
+    for node in "${ALL_NODES[@]}"; do
+        local max_attempts=10
+        local attempt=1
+        while [ $attempt -le $max_attempts ]; do
+            if multipass exec "$node" -- true 2>/dev/null; then
+                log "SSH connectivity verified for $node"
+                break
+            fi
+            log "Waiting for SSH on $node to be ready (attempt $attempt/$max_attempts)..."
+            attempt=$((attempt + 1))
+            sleep 2
+        done
+        if [ $attempt -gt $max_attempts ]; then
+            log "Failed to establish SSH connectivity to $node"
+            exit 1
+        fi
+    done
+    
+    log "All worker nodes created and verified successfully."
 }
 
 initialize_control_plane() {
