@@ -7,8 +7,11 @@ This script automates the creation of a Kubernetes cluster using [Multipass](htt
 2. [Installation](#installation)
 3. [Usage](#usage)
    - [What Happens During Execution?](#what-happens-during-execution)
+4. [Addons Installation](#addons-installation)
    - [Installing MetalLB Load Balancer](#installing-metallb-load-balancer)
-4. [Troubleshooting](#troubleshooting)
+   - [Dynamic Local Storage Configuration](#installing-dynamically-provisioning-persistent-local-storage)
+   - [Monitoring](#monitoring)
+   - [Istio Setup](#istio-setup)
 5. [Acknowledgments](#acknowledgments)
 
 ---
@@ -82,6 +85,14 @@ Run the script to create the Kubernetes cluster:
 6. **Cleanup**:
    - If the script fails or is interrupted, it automatically cleans up all Multipass instances to prevent resource leaks.
 
+Copy kubeconfig to your local machine for `kubectl` access:
+```bash
+multipass transfer control:/home/ubuntu/.kube/config ./kubeconfig
+export KUBECONFIG=$PWD/.kubeconfig
+``` 
+## Addons Installation
+After setting up the cluster, you can install additional addons like MetalLB for LoadBalancer services and a dynamic local storage provisioner.
+
 ### Installing MetalLB Load Balancer
 
 After setting up the cluster, you can install MetalLB to enable LoadBalancer services:
@@ -98,7 +109,7 @@ After setting up the cluster, you can install MetalLB to enable LoadBalancer ser
 
 The script will:
 - Install MetalLB components in the `metallb-system` namespace
-- Configure an IP address pool (192.168.64.200-192.168.64.220)
+- Configure an IP address pool (e.g. 192.168.64.200-192.168.64.220)
 - Set up L2 advertisement for LoadBalancer services
 
 To verify the installation:
@@ -108,46 +119,40 @@ kubectl get pods -n metallb-system
 
 You can now create LoadBalancer services that will automatically receive IP addresses from the configured pool.
 
----
+### Installing Dynamically Provisioning Persistent Local Storage
 
-## Troubleshooting
+To set up dynamically provisioning persistent local storage with Kubernetes, you can use the Rancher Local Path Provisioner:
 
-### Common Issues and Solutions
+1. Install the local-path-provisioner:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.32/deploy/local-path-storage.yaml
+   ```
 
-1. **Script Gets Stuck Waiting for API Server**:
-   - Ensure the `kube-apiserver` pod is running:
-     ```bash
-     multipass exec control -- sudo -u ubuntu kubectl --kubeconfig=/home/ubuntu/.kube/config get pods -n kube-system
-     ```
-   - Check the logs for the `kube-apiserver` pod:
-     ```bash
-     multipass exec control -- sudo -u ubuntu kubectl --kubeconfig=/home/ubuntu/.kube/config logs -n kube-system <kube-apiserver-pod-name>
-     ```
+2. Make it the default StorageClass:
+   ```bash
+   kubectl annotate storageclass local-path storageclass.kubernetes.io/is-default-class=true --overwrite
+   ```
 
-2. **`kubectl` Commands Fail**:
-   - Verify that the `.kube/config` file exists and is owned by the `ubuntu` user:
-     ```bash
-     multipass exec control -- ls -l /home/ubuntu/.kube/config
-     ```
-   - Test `kubectl` manually:
-     ```bash
-     multipass exec control -- sudo -u ubuntu kubectl --kubeconfig=/home/ubuntu/.kube/config get nodes
-     ```
+3. Verify the StorageClass:
+   ```bash
+   kubectl get storageclass
+   ```
 
-3. **Multipass Resource Limits**:
-   - If you encounter resource-related errors, increase the CPU, memory, or disk allocation in the script:
-     ```bash
-     multipass launch -n <node-name> <image> -c <cpus> -m <memory> -d <disk-size>
-     ```
+For more information, visit the [Rancher Local Path Provisioner GitHub repository](https://github.com/rancher/local-path-provisioner).
 
-4. **Firewall or Network Issues**:
-   - Ensure that no firewall rules block communication between the control plane and worker nodes.
+### Monitoring
+
+For comprehensive monitoring of your Kubernetes cluster, refer to the [monitoring setup guide](monitoring.md) which includes instructions for installing Prometheus, Grafana, and metrics-server.
+
+### Istio Setup
+To set up Istio service mesh in your Kubernetes cluster, follow the instructions in the [Istio setup guide](istio-setup.md). This guide covers installation, configuration, and basic usage of Istio features.
 
 ---
-
 ## Acknowledgments
 
 - [Multipass](https://multipass.run/): For providing a lightweight and easy-to-use VM manager.
 - [Kubernetes](https://kubernetes.io/): For the powerful container orchestration platform.
 - [Calico](https://www.tigera.io/project-calico/): For the robust CNI solution.
 - [MetalLB](https://metallb.io/): For the load-balancer implementation.
+- [metrics-server](https://github.com/kubernetes-sigs/metrics-server): For the monitoring stack.
+- [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics): For monitoring Kubernetes resources.
